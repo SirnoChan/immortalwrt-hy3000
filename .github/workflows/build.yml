@@ -11,7 +11,7 @@ on:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: openwrt-24.10
+  REPO_BRANCH: openwrt-25.12
   TZ: Asia/Shanghai
 
 jobs:
@@ -33,7 +33,7 @@ jobs:
           swap-storage: true
 
       - name: Checkout this repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install dependencies
         env:
@@ -72,11 +72,17 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Run diy-part2.sh (apply HY3000 patches)
+      - name: Add daed package (not in ImmortalWrt feeds)
         run: |
-          chmod +x diy-part2.sh
           cd openwrt
-          $GITHUB_WORKSPACE/diy-part2.sh
+          git clone --depth=1 https://github.com/QiuSimons/luci-app-daed.git package/dae
+
+      - name: Add HY3000 device support (add-hy3000.sh)
+        run: |
+          chmod +x add-hy3000.sh
+          bash add-hy3000.sh openwrt "$GITHUB_WORKSPACE/patches"
+          # Set default hostname
+          sed -i 's/ImmortalWrt/HY3000/g' openwrt/package/base-files/files/bin/config_generate
 
       - name: Load .config
         run: |
@@ -88,25 +94,59 @@ jobs:
           fi
           cd openwrt
           make defconfig
+          grep -q "CONFIG_TARGET_mediatek_filogic_DEVICE_philips_hy3000=y" .config || {
+            echo "### ERROR: philips_hy3000 missing from final .config — device patches did not apply!"
+            exit 1
+          }
           echo "=== Final config (key items) ==="
-          grep -E "BTF|BPF|dae|philips|ROOTFS_PARTSIZE" .config
+          grep -E "BTF|BPF|dae|veth|philips|ROOTFS_PARTSIZE" .config || true
 
       - name: Download packages
         run: |
           cd openwrt
-          make download -j$(nproc)
-          find dl -size -1024c -exec rm -f {} \;
-          echo "Download complete."
+          for i in 1 2 3; do
+            if make download -j$(nproc); then
+              find dl -size -1024c -exec rm -f {} \;
+              echo "Download complete (attempt $i)."
+              exit 0
+            fi
+            echo "### Download attempt $i failed, retrying in 15s..."
+            sleep 15
+          done
+          echo "### Downloads failed after 3 attempts."
+          exit 1
 
       - name: Compile firmware
         id: compile
         run: |
           cd openwrt
           echo "Compiling with $(nproc) threads..."
-          make -j$(nproc) 2>&1 | tail -20 || make -j1 V=s 2>&1 | tail -100
+          if ! make -j$(nproc) > build.log 2>&1; then
+            echo "### Parallel build failed — last 30 lines of build.log:"
+            tail -30 build.log || true
+            echo ""
+            echo "### Retrying with make -j1 V=s (single-threaded, verbose)..."
+            if make -j1 V=s > build-vs.log 2>&1; then
+              echo "### Single-threaded retry succeeded."
+            else
+              echo "### Build still failing — last 150 lines of build-vs.log:"
+              tail -150 build-vs.log || true
+              exit 1
+            fi
+          fi
           echo "status=success" >> $GITHUB_OUTPUT
           echo "=== Output files ==="
           ls -lh bin/targets/mediatek/filogic/
+
+      - name: Upload build logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            openwrt/build.log
+            openwrt/build-vs.log
+          if-no-files-found: ignore
 
       - name: Organize output
         if: steps.compile.outputs.status == 'success'
@@ -128,12 +168,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: "HY3000 ImmortalWrt 24.10 (${{ steps.tag.outputs.date }})"
+          name: "HY3000 ImmortalWrt 25.12 (${{ steps.tag.outputs.date }})"
           body: |
-            ## Philips HY3000 - ImmortalWrt 24.10 with BTF/dae support
+            ## Philips HY3000 - ImmortalWrt 25.12 with BTF/dae support
 
             **Features:**
-            - ImmortalWrt 24.10 (kernel 6.6)
+            - ImmortalWrt 25.12 (kernel 6.12)
             - BTF/eBPF enabled for dae support
             - daed + luci-app-daed pre-installed
             - WiFi MT7915E (2.4G + 5G)

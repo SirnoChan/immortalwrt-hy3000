@@ -31,12 +31,14 @@ else
         echo "platform.sh patched."
     fi
 
-    # uboot-envtools
-    if ! grep -q "philips,hy3000" package/boot/uboot-tools/uboot-envtools/files/mediatek_filogic 2>/dev/null; then
-        sed -i '/cmcc,rax3000m)$/a\philips,hy3000)' \
-            package/boot/uboot-tools/uboot-envtools/files/mediatek_filogic 2>/dev/null || true
-        echo "uboot-envtools patched."
-    fi
+    # uboot-envtools (package path differs between branches: uboot-tools/ vs uboot-envtools/)
+    for envf in package/boot/uboot-tools/uboot-envtools/files/mediatek_filogic \
+                package/boot/uboot-envtools/files/mediatek_filogic; do
+        if [ -f "$envf" ] && ! grep -q "philips,hy3000" "$envf"; then
+            sed -i '/^cmcc,rax3000me|\\$/a\philips,hy3000|\\' "$envf"
+            echo "uboot-envtools patched ($envf)."
+        fi
+    done
 
     # filogic.mk - add device definition
     if ! grep -q "philips_hy3000" target/linux/mediatek/image/filogic.mk; then
@@ -83,17 +85,48 @@ cp -f "$PATCHDIR/mt7981_philips_hy3000_defconfig" package/boot/uboot-mediatek/co
 cp -f "$PATCHDIR/philips_hy3000_env" package/boot/uboot-mediatek/defenvs/
 
 if [ -f package/boot/uboot-mediatek/Makefile ] && ! grep -q "mt7981_philips_hy3000" package/boot/uboot-mediatek/Makefile; then
-    sed -i '/^define U-Boot\/mt7981_cmcc_rax3000m-nand-ddr4/a\\ndefine U-Boot/mt7981_philips_hy3000\n  NAME:=PHILIPS HY3000\n  BUILD_SUBTARGET:=filogic\n  BUILD_DEVICES:=philips_hy3000\n  UBOOT_CONFIG:=mt7981_philips_hy3000\n  UBOOT_IMAGE:=u-boot.fip\n  ENV_NAME:=philips_hy3000\n  BL2_BOOTDEV:=emmc\n  BL2_SOC:=mt7981\n  BL2_DDRTYPE:=ddr4\n  DEPENDS:=+trusted-firmware-a-mt7981-emmc-ddr4\nendef\n' package/boot/uboot-mediatek/Makefile || true
-    sed -i '/mt7981_cmcc_rax3000m-nand-ddr4 \\/a\\tmt7981_philips_hy3000 \\' package/boot/uboot-mediatek/Makefile || true
+    if grep -q "define U-Boot/mt7981_cmcc_rax3000m-nand-ddr4" package/boot/uboot-mediatek/Makefile; then
+        # openwrt-24.10 layout (U-Boot 2024.10, ENV_NAME/defenvs mechanism)
+        sed -i '/^define U-Boot\/mt7981_cmcc_rax3000m-nand-ddr4$/a\\ndefine U-Boot/mt7981_philips_hy3000\n  NAME:=PHILIPS HY3000\n  BUILD_SUBTARGET:=filogic\n  BUILD_DEVICES:=philips_hy3000\n  UBOOT_CONFIG:=mt7981_philips_hy3000\n  UBOOT_IMAGE:=u-boot.fip\n  ENV_NAME:=philips_hy3000\n  BL2_BOOTDEV:=emmc\n  BL2_SOC:=mt7981\n  BL2_DDRTYPE:=ddr4\n  DEPENDS:=+trusted-firmware-a-mt7981-emmc-ddr4\nendef\n' package/boot/uboot-mediatek/Makefile || true
+        UBOOTTARGET_ANCHOR='^[[:space:]]mt7981_cmcc_rax3000m-nand-ddr4[[:space:]]*\\$'
+    else
+        # openwrt-25.12 layout (U-Boot 2025.10, ENV_NAME removed)
+        sed -i '/^define U-Boot\/mt7981_cmcc_rax3000m-emmc$/i\define U-Boot/mt7981_philips_hy3000\n  NAME:=PHILIPS HY3000\n  BUILD_SUBTARGET:=filogic\n  BUILD_DEVICES:=philips_hy3000\n  UBOOT_CONFIG:=mt7981_philips_hy3000\n  UBOOT_IMAGE:=u-boot.fip\n  BL2_BOOTDEV:=emmc\n  BL2_SOC:=mt7981\n  BL2_DDRTYPE:=ddr4\n  DEPENDS:=+trusted-firmware-a-mt7981-emmc-ddr4\nendef\n' package/boot/uboot-mediatek/Makefile || true
+        UBOOTTARGET_ANCHOR='^[[:space:]]mt7981_cmcc_rax3000m-emmc[[:space:]]*\\$'
+    fi
+    # Append philips_hy3000 to the UBOOT_TARGETS list.
+    # awk is used because sed a\ text escape handling differs between sed builds
+    # (a literal tab + trailing backslash is required in the Makefile).
+    if grep -q "define U-Boot/mt7981_philips_hy3000" package/boot/uboot-mediatek/Makefile && \
+       ! grep -q '^[[:space:]]mt7981_philips_hy3000[[:space:]]*\\$' package/boot/uboot-mediatek/Makefile && \
+       [ -n "$UBOOTTARGET_ANCHOR" ]; then
+        tmpf=$(mktemp)
+        UBOOTTARGET_ANCHOR="$UBOOTTARGET_ANCHOR" awk '
+            $0 ~ ENVIRON["UBOOTTARGET_ANCHOR"] { print; print "\tmt7981_philips_hy3000 \\"; next }
+            { print }
+        ' package/boot/uboot-mediatek/Makefile > "$tmpf" \
+            && mv "$tmpf" package/boot/uboot-mediatek/Makefile \
+            && echo "UBOOT_TARGETS list updated."
+    fi
 fi
 
-# Enable VETH
-sed -i 's/# CONFIG_VETH is not set/CONFIG_VETH=m/' target/linux/generic/config-6.6
+# Enable VETH (kernel config file name varies by branch: config-6.6 / config-6.12 ...)
+for kcfg in target/linux/generic/config-*; do
+    sed -i 's/# CONFIG_VETH is not set/CONFIG_VETH=m/' "$kcfg"
+done
 
 echo "=== Verification ==="
 grep -c "philips" target/linux/mediatek/image/filogic.mk
 ls target/linux/mediatek/dts/mt7981b-philips-hy3000.dts
-grep VETH target/linux/generic/config-6.6
+grep VETH target/linux/generic/config-*
+# U-Boot variant must be registered, or the bl31-uboot.fip artifact build fails later
+if grep -q "define U-Boot/mt7981_philips_hy3000" package/boot/uboot-mediatek/Makefile; then
+    grep -q '^[[:space:]]mt7981_philips_hy3000[[:space:]]*\\$' package/boot/uboot-mediatek/Makefile || {
+        echo "### ERROR: mt7981_philips_hy3000 missing from UBOOT_TARGETS enumeration"
+        exit 1
+    }
+    echo "U-Boot variant registered in UBOOT_TARGETS."
+fi
 ls package/boot/uboot-mediatek/patches/471-add-philips_hy3000.patch
 ls package/boot/uboot-mediatek/configs/mt7981_philips_hy3000_defconfig
 ls package/boot/uboot-mediatek/defenvs/philips_hy3000_env
