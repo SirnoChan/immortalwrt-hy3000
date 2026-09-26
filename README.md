@@ -23,6 +23,7 @@ HY3000 设备适配、固件构建配置与补丁工作区。
 | [diy-part2.sh](./diy-part2.sh) | 已废弃：无工作流调用，适配功能由 add-hy3000.sh 取代 |
 | [add-hy3000.sh](./add-hy3000.sh) | HY3000 适配脚本（build.yml / build-official.yml 调用） |
 | [patches](./patches) | 设备树、设备 profile、defconfig 与相关补丁 |
+| [files](./files) | 首次启动 uci-defaults 脚本：自动在空闲 eMMC 空间创建 /mnt/data 数据分区（不受 sysupgrade 影响） |
 | [workflows](./.github/workflows) | 不同上游或构建目标的工作流 |
 
 ## 构建入口

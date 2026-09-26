@@ -1,0 +1,56 @@
+#!/bin/sh
+# 99-hy3000-data-partition - first boot: turn free eMMC space into a
+# persistent f2fs data partition mounted at /mnt/data.
+#
+# The partition is created AFTER the firmware partition, so sysupgrade
+# (which only rewrites the firmware area) never touches it. Idempotent:
+# re-runs and post-sysupgrade boots are no-ops via the LABEL check.
+
+EMMC=/dev/mmcblk0
+
+[ -b "$EMMC" ] || exit 0
+
+# already set up (also true after sysupgrade - partition survives)
+if blkid | grep -q 'LABEL="data"'; then
+	echo "hy3000-data: 'data' partition already present, skipping"
+	exit 0
+fi
+
+# one partition covering all remaining free space (GPT-aware; sfdisk
+# relocates the backup GPT header to the new end of disk)
+if ! echo ",+" | sfdisk --append "$EMMC"; then
+	echo "hy3000-data: no free space or sfdisk failed, skipping" >&2
+	exit 0
+fi
+
+# make the new partition node appear without reboot
+partx -a "$EMMC" 2>/dev/null || true
+sleep 2
+
+# highest-numbered mmcblk0pN node (busybox-safe, no `ls -v`)
+NEWPART=''
+MAX=-1
+for p in ${EMMC}p*; do
+	n=${p##*p}
+	case "$n" in ''|*[!0-9]*) continue ;; esac
+	if [ "$n" -gt "$MAX" ]; then MAX=$n; NEWPART=$p; fi
+done
+[ -b "$NEWPART" ] || { echo "hy3000-data: new partition node not found" >&2; exit 1; }
+
+mkfs.f2fs -l data -f "$NEWPART" || { echo "hy3000-data: mkfs.f2fs failed" >&2; exit 1; }
+
+mkdir -p /mnt/data
+uci -q delete fstab.data
+uci set fstab.data=mount
+uci set fstab.data.label='data'
+uci set fstab.data.target='/mnt/data'
+uci set fstab.data.fstype='f2fs'
+uci set fstab.data.options='rw,noatime'
+uci set fstab.data.enabled='1'
+uci commit fstab
+
+# mount now; if that fails, fstab picks it up on next boot
+mount -t f2fs -o rw,noatime "$NEWPART" /mnt/data 2>/dev/null \
+	|| echo "hy3000-data: will mount via fstab on next boot"
+
+echo "hy3000-data: created $NEWPART (f2fs, label 'data') mounted at /mnt/data"

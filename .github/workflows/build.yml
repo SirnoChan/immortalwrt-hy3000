@@ -121,6 +121,13 @@ jobs:
           # Set default hostname
           sed -i 's/ImmortalWrt/HY3000/g' openwrt/package/base-files/files/bin/config_generate
 
+      - name: Overlay first-boot files (auto data partition)
+        run: |
+          mkdir -p openwrt/files/etc/uci-defaults
+          cp files/etc/uci-defaults/99-hy3000-data-partition openwrt/files/etc/uci-defaults/
+          echo "=== firstboot overlay ==="
+          ls -l openwrt/files/etc/uci-defaults/
+
       - name: Load .config
         run: |
           cp .config openwrt/.config
