@@ -8,6 +8,15 @@ on:
         required: false
         default: 'false'
         type: boolean
+  schedule:
+    # UTC 18:23 = 北京时间 02:23（避开整点，GitHub 定时任务高峰期会延迟）
+    - cron: '23 18 * * *'
+
+# 上游 immortalwrt/immortalwrt 无法向 fork 发通知，改为定时轮询：
+# check-upstream 比对上游 HEAD 与 .upstream-sha 记录，有变化才触发构建
+concurrency:
+  group: build-immortalwrt-hy3000
+  cancel-in-progress: false
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
@@ -15,8 +24,36 @@ env:
   TZ: Asia/Shanghai
 
 jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    outputs:
+      upstream_sha: ${{ steps.check.outputs.upstream_sha }}
+      build_needed: ${{ steps.check.outputs.build_needed }}
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v5
+
+      - name: Compare upstream openwrt-25.12 HEAD with .upstream-sha
+        id: check
+        run: |
+          UPSTREAM_SHA=$(git ls-remote "$REPO_URL" "refs/heads/$REPO_BRANCH" | cut -f1)
+          STORED_SHA=$(cat .upstream-sha 2>/dev/null || true)
+          echo "upstream: $UPSTREAM_SHA"
+          echo "stored:   ${STORED_SHA:-<none>}"
+          echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
+          if [ -n "$STORED_SHA" ] && [ "$UPSTREAM_SHA" = "$STORED_SHA" ]; then
+            echo "Upstream unchanged — skipping build."
+            echo "build_needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Upstream changed — build needed."
+            echo "build_needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: check-upstream
+    if: needs.check-upstream.outputs.build_needed == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-22.04
+    timeout-minutes: 360
     permissions:
       contents: write
 
@@ -192,3 +229,16 @@ jobs:
         with:
           name: immortalwrt-hy3000-firmware
           path: openwrt/bin/targets/mediatek/filogic/
+
+      - name: Record upstream SHA for next comparison
+        if: success()
+        env:
+          UPSTREAM_SHA: ${{ needs.check-upstream.outputs.upstream_sha }}
+        run: |
+          echo "$UPSTREAM_SHA" > .upstream-sha
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .upstream-sha
+          git diff --cached --quiet && echo "SHA unchanged, nothing to record." && exit 0
+          git commit -m "ci: track immortalwrt openwrt-25.12 @ ${UPSTREAM_SHA:0:12} [skip ci]"
+          git push
