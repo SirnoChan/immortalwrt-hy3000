@@ -20,8 +20,8 @@ HY3000 设备适配、固件构建配置与补丁工作区。
 | --- | --- |
 | [.config](./.config) | 构建选项与软件包选择 |
 | [diy-part1.sh](./diy-part1.sh) | feeds 处理前的定制步骤 |
-| [diy-part2.sh](./diy-part2.sh) | 设备适配与构建定制 |
-| [add-hy3000.sh](./add-hy3000.sh) | HY3000 适配脚本 |
+| [diy-part2.sh](./diy-part2.sh) | 已废弃：无工作流调用，适配功能由 add-hy3000.sh 取代 |
+| [add-hy3000.sh](./add-hy3000.sh) | HY3000 适配脚本（build.yml / build-official.yml 调用） |
 | [patches](./patches) | 设备树、设备 profile、defconfig 与相关补丁 |
 | [workflows](./.github/workflows) | 不同上游或构建目标的工作流 |
 
@@ -35,7 +35,7 @@ HY3000 设备适配、固件构建配置与补丁工作区。
 | [build-padavanonly.yml](./.github/workflows/build-padavanonly.yml) | Padavan 相关构建配置 |
 | [build-kmod-veth.yml](./.github/workflows/build-kmod-veth.yml) | veth 内核模块相关构建配置 |
 
-主工作流 `build.yml` 使用手动触发，拉取 `immortalwrt/immortalwrt` 的 `openwrt-24.10` 分支，运行在 `ubuntu-22.04`，提供 `with_docker` 输入。其他工作流是不同入口，不应把一个入口的产物或设备参数套用到另一个入口。
+主工作流 `build.yml` 支持手动触发与每日定时触发（北京时间 02:23 轮询，上游 `openwrt-25.12` 有新提交才实际构建），拉取 `immortalwrt/immortalwrt` 的 `openwrt-25.12` 分支，运行在 `ubuntu-22.04`，提供 `with_docker` 输入。其他工作流是不同入口，不应把一个入口的产物或设备参数套用到另一个入口。
 
 ```mermaid
 flowchart LR
@@ -46,7 +46,7 @@ flowchart LR
     Output --> Verify[设备 / 分区 / 校验和核对]
 ```
 
-查阅 [Actions](https://github.com/alanbulan/immortalwrt-hy3000/actions) 的具体运行记录确认产物是否生成；不要由工作流文件的存在推断已经出包。固件编译会消耗较多构建时间和磁盘，本次没有触发构建。
+查阅 [Actions](https://github.com/SirnoChan/immortalwrt-hy3000/actions) 的具体运行记录确认产物是否生成；不要由工作流文件的存在推断已经出包。固件编译会消耗较多构建时间和磁盘，本次没有触发构建。
 
 ## 验证与使用
 
