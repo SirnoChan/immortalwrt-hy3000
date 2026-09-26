@@ -31,7 +31,7 @@ jobs:
           swap-storage: true
 
       - name: Checkout this repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install dependencies
         env:
@@ -114,7 +114,19 @@ jobs:
         id: compile
         run: |
           cd openwrt
-          make -j$(nproc) || make -j1 V=s 2>&1 | tail -300
+          if ! make -j$(nproc) > build.log 2>&1; then
+            echo "### Parallel build failed — last 30 lines of build.log:"
+            tail -30 build.log || true
+            echo ""
+            echo "### Retrying with make -j1 V=s (single-threaded, verbose)..."
+            if make -j1 V=s > build-vs.log 2>&1; then
+              echo "### Single-threaded retry succeeded."
+            else
+              echo "### Build still failing — last 150 lines of build-vs.log:"
+              tail -150 build-vs.log || true
+              exit 1
+            fi
+          fi
           echo "status=success" >> $GITHUB_OUTPUT
           ls -lh bin/targets/mediatek/filogic/
 
