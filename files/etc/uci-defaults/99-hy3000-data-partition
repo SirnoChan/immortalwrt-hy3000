@@ -2,11 +2,17 @@
 # 99-hy3000-data-partition - first boot: turn free eMMC space into a
 # persistent f2fs data partition mounted at /mnt/data.
 #
-# The partition is created AFTER the firmware partition, so sysupgrade
-# (which only rewrites the firmware area) never touches it. Idempotent:
-# re-runs and post-sysupgrade boots are no-ops via the LABEL check.
+# Robust against either GPT being active:
+#  - OpenWrt mt798x-gpt layout: one big free region after 'firmware' -> used.
+#  - stock vendor GPT still present: disk is fully allocated; the largest
+#    free gap is only ~4MB (BL2 area) -> we refuse instead of creating a
+#    useless tiny partition. No existing partition is ever touched.
+#
+# The created partition lives past the firmware area, so sysupgrade (which
+# only rewrites firmware) never touches it. Idempotent via the LABEL check.
 
 EMMC=/dev/mmcblk0
+MIN_SECTORS=2097152   # 1 GiB of 512B sectors; smaller free space -> skip
 
 [ -b "$EMMC" ] || exit 0
 
@@ -16,10 +22,21 @@ if blkid | grep -q 'LABEL="data"'; then
 	exit 0
 fi
 
-# one partition covering all remaining free space (GPT-aware; sfdisk
+# find the largest free region
+BEST=$(sfdisk --list-free --output Start,Sectors --noheadings "$EMMC" 2>/dev/null \
+	| sort -k2 -n | tail -n 1)
+[ -n "$BEST" ] || { echo "hy3000-data: cannot read free regions" >&2; exit 0; }
+START=$(echo "$BEST" | awk '{print $1}')
+SECTORS=$(echo "$BEST" | awk '{print $2}')
+if [ -z "$START" ] || [ -z "$SECTORS" ] || [ "$SECTORS" -lt "$MIN_SECTORS" ]; then
+	echo "hy3000-data: largest free region too small (${SECTORS:-0} sectors), skipping" >&2
+	exit 0
+fi
+
+# create a partition covering that whole free region (GPT-aware; sfdisk
 # relocates the backup GPT header to the new end of disk)
-if ! echo ",+" | sfdisk --append "$EMMC"; then
-	echo "hy3000-data: no free space or sfdisk failed, skipping" >&2
+if ! echo "$START,+" | sfdisk --append "$EMMC"; then
+	echo "hy3000-data: sfdisk failed, skipping" >&2
 	exit 0
 fi
 
