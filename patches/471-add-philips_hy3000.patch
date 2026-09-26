@@ -1,9 +1,9 @@
 diff --git a/arch/arm/dts/mt7981-philips-hy3000.dts b/arch/arm/dts/mt7981-philips-hy3000.dts
 new file mode 100644
-index 00000000..0dbefa79
+index 0000000..5522578
 --- /dev/null
 +++ b/arch/arm/dts/mt7981-philips-hy3000.dts
-@@ -0,0 +1,127 @@
+@@ -0,0 +1,126 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/*
 + * Copyright (c) 2022 MediaTek Inc.
