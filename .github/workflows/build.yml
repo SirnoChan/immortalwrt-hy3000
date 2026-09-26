@@ -241,4 +241,7 @@ jobs:
           git add .upstream-sha
           git diff --cached --quiet && echo "SHA unchanged, nothing to record." && exit 0
           git commit -m "ci: track immortalwrt openwrt-25.12 @ ${UPSTREAM_SHA:0:12} [skip ci]"
+          # main may have moved during the ~3h build; rebase so this step
+          # can't fail after the firmware was already released
+          git pull --rebase --autostash
           git push
