@@ -73,16 +73,10 @@ DEVEOF
     fi
 fi
 
-# Add U-Boot support pieces for flashable images
+# U-Boot variant support ships as a single patch that adds DTS + defconfig
+# + defenvs into the u-boot source tree (same pattern as upstream 4xx patches).
 mkdir -p package/boot/uboot-mediatek/patches
-mkdir -p package/boot/uboot-mediatek/files
-mkdir -p package/boot/uboot-mediatek/env
-mkdir -p package/boot/uboot-mediatek/configs
-mkdir -p package/boot/uboot-mediatek/defenvs
-
 cp -f "$PATCHDIR/471-add-philips_hy3000.patch" package/boot/uboot-mediatek/patches/
-cp -f "$PATCHDIR/mt7981_philips_hy3000_defconfig" package/boot/uboot-mediatek/configs/
-cp -f "$PATCHDIR/philips_hy3000_env" package/boot/uboot-mediatek/defenvs/
 
 if [ -f package/boot/uboot-mediatek/Makefile ] && ! grep -q "mt7981_philips_hy3000" package/boot/uboot-mediatek/Makefile; then
     if grep -q "define U-Boot/mt7981_cmcc_rax3000m-nand-ddr4" package/boot/uboot-mediatek/Makefile; then
@@ -128,6 +122,6 @@ if grep -q "define U-Boot/mt7981_philips_hy3000" package/boot/uboot-mediatek/Mak
     echo "U-Boot variant registered in UBOOT_TARGETS."
 fi
 ls package/boot/uboot-mediatek/patches/471-add-philips_hy3000.patch
-ls package/boot/uboot-mediatek/configs/mt7981_philips_hy3000_defconfig
-ls package/boot/uboot-mediatek/defenvs/philips_hy3000_env
+grep -q "configs/mt7981_philips_hy3000_defconfig" package/boot/uboot-mediatek/patches/471-add-philips_hy3000.patch
+grep -q "defenvs/philips_hy3000_env" package/boot/uboot-mediatek/patches/471-add-philips_hy3000.patch
 echo "=== All done ==="
