@@ -111,11 +111,6 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Add daed package (not in ImmortalWrt feeds)
-        run: |
-          cd openwrt
-          git clone --depth=1 https://github.com/QiuSimons/luci-app-daed.git package/dae
-
       - name: Add HY3000 device support (add-hy3000.sh)
         run: |
           chmod +x add-hy3000.sh
