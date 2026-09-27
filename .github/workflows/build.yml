@@ -25,7 +25,9 @@ env:
 
 jobs:
   check-upstream:
-    runs-on: ubuntu-latest
+    # pinned, not ubuntu-latest: that alias flips to Ubuntu 26 on 2026-10-19
+    # (actions/runner-images#14748); this job only needs git, any pin works
+    runs-on: ubuntu-24.04
     outputs:
       upstream_sha: ${{ steps.check.outputs.upstream_sha }}
       build_needed: ${{ steps.check.outputs.build_needed }}
