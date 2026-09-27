@@ -61,9 +61,9 @@ jobs:
 
     steps:
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@v2.0.0
         with:
-          tool-cache: true
+          preinstalled-runtimes: true
           android: true
           dotnet: true
           haskell: true
@@ -186,7 +186,7 @@ jobs:
 
       - name: Upload build logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-log
           path: |
@@ -211,7 +211,7 @@ jobs:
 
       - name: Upload firmware to release
         if: steps.compile.outputs.status == 'success'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: "HY3000 ImmortalWrt 25.12 (${{ steps.tag.outputs.date }})"
@@ -234,7 +234,7 @@ jobs:
 
       - name: Upload firmware as artifact (backup)
         if: steps.compile.outputs.status == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: immortalwrt-hy3000-firmware
           path: openwrt/bin/targets/mediatek/filogic/

@@ -11,9 +11,9 @@ jobs:
 
     steps:
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@v2.0.0
         with:
-          tool-cache: true
+          preinstalled-runtimes: true
           android: true
           dotnet: true
           haskell: true
@@ -155,7 +155,7 @@ jobs:
           ls -lh bin/targets/mediatek/filogic/*hy3000* 2>/dev/null || echo "No HY3000 images found"
 
       - name: Upload release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: istoreos-hy3000-btf-${{ github.run_number }}
           name: iStoreOS HY3000 + BTF/daed
@@ -171,7 +171,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: istoreos-hy3000-btf-daed
           path: openwrt/bin/targets/mediatek/filogic/

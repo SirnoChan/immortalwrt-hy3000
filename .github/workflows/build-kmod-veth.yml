@@ -14,9 +14,9 @@ jobs:
 
     steps:
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@v2.0.0
         with:
-          tool-cache: true
+          preinstalled-runtimes: true
           android: true
           dotnet: true
           haskell: true
@@ -116,7 +116,7 @@ jobs:
           ls -lh /tmp/kmod-output/
 
       - name: Upload kmod-veth
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: kmod-veth-hy3000
           path: /tmp/kmod-output/

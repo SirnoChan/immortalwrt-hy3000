@@ -20,9 +20,9 @@ jobs:
 
     steps:
       - name: Free disk space
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@v2.0.0
         with:
-          tool-cache: true
+          preinstalled-runtimes: true
           android: true
           dotnet: true
           haskell: true
@@ -132,7 +132,7 @@ jobs:
 
       - name: Upload to release
         if: steps.compile.outputs.status == 'success'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: hy3000-v${{ github.run_number }}
           name: HY3000 ImmortalWrt + BTF/dae/iStore
@@ -144,7 +144,7 @@ jobs:
 
       - name: Upload artifact
         if: steps.compile.outputs.status == 'success'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hy3000-firmware
           path: openwrt/bin/targets/mediatek/filogic/
