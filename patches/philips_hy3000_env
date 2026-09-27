@@ -6,17 +6,17 @@ bootargs=root=/dev/fit0 rootwait
 bootcmd=if pstore check ; then run boot_recovery ; else run boot_emmc ; fi
 bootconf=config-1#mt7981b-philips-hy3000
 bootdelay=0
-bootfile=openwrt-mediatek-filogic-philips_hy3000-initramfs-recovery.itb
-bootfile_bl2=openwrt-mediatek-filogic-philips_hy3000-preloader.bin
-bootfile_fip=openwrt-mediatek-filogic-philips_hy3000-bl31-uboot.fip
-bootfile_upg=openwrt-mediatek-filogic-philips_hy3000-squashfs-sysupgrade.itb
-bootfile_gpt=openwrt-mediatek-filogic-philips_hy3000-gpt.bin
+bootfile=immortalwrt-mediatek-filogic-philips_hy3000-initramfs-recovery.itb
+bootfile_bl2=immortalwrt-mediatek-filogic-philips_hy3000-preloader.bin
+bootfile_fip=immortalwrt-mediatek-filogic-philips_hy3000-bl31-uboot.fip
+bootfile_upg=immortalwrt-mediatek-filogic-philips_hy3000-squashfs-sysupgrade.itb
+bootfile_gpt=immortalwrt-mediatek-filogic-philips_hy3000-gpt.bin
 bootled_pwr=red:status
 bootled_rec=green:status
 bootmenu_confirm_return=askenv - Press ENTER to return to menu ; bootmenu 60
 bootmenu_default=0
 bootmenu_delay=0
-bootmenu_title=      OpenWrt [eMMC]
+bootmenu_title=      [0;34m( ( ( [1;39mImmortalWrt[0;34m ) ) )  [0;36m[eMMC][0m
 bootmenu_0=Initialize environment.=run _firstboot
 bootmenu_0d=Run default boot command.=run boot_default
 bootmenu_1=Boot system via TFTP.=run boot_tftp ; run bootmenu_confirm_return
@@ -24,9 +24,9 @@ bootmenu_2=Boot production system from eMMC.=run boot_production ; run bootmenu_
 bootmenu_3=Boot recovery system from eMMC.=run boot_recovery ; run bootmenu_confirm_return
 bootmenu_4=Load production system via TFTP then write to eMMC.=setenv noboot 1 ; setenv replacevol 1 ; run boot_tftp_production ; setenv noboot ; setenv replacevol ; run bootmenu_confirm_return
 bootmenu_5=Load recovery system via TFTP then write to eMMC.=setenv noboot 1 ; setenv replacevol 1 ; run boot_tftp_recovery ; setenv noboot ; setenv replacevol ; run bootmenu_confirm_return
-bootmenu_6=Load BL31+U-Boot FIP via TFTP then write to eMMC.=run boot_tftp_write_fip ; run bootmenu_confirm_return
-bootmenu_7=Load BL2 preloader via TFTP then write to eMMC.=run boot_tftp_write_bl2 ; run bootmenu_confirm_return
-bootmenu_8=Load eMMC GPT via TFTP.=run boot_tftp_write_gpt ; run bootmenu_confirm_return
+bootmenu_6=[31mLoad BL31+U-Boot FIP via TFTP then write to eMMC.[0m=run boot_tftp_write_fip ; run bootmenu_confirm_return
+bootmenu_7=[31mLoad BL2 preloader via TFTP then write to eMMC.[0m=run boot_tftp_write_bl2 ; run bootmenu_confirm_return
+bootmenu_8=[31mLoad eMMC GPT via TFTP.[0m=run boot_tftp_write_gpt ; run bootmenu_confirm_return
 bootmenu_9=Reboot.=reset
 bootmenu_10=Reset all settings to factory defaults.=run reset_factory ; reset
 boot_first=if button reset ; then led $bootled_rec on ; run boot_tftp_recovery ; setenv flag_recover 1 ; run boot_default ; fi ; bootmenu
@@ -53,3 +53,7 @@ emmc_write_fip=mmc erase 0x3400 0x2000 && mmc write $fileaddr 0x3400 0x2000 && m
 emmc_write_gpt=mmc write $fileaddr 0x0 0x22
 emmc_write_production=part start mmc 0 $part_default part_addr && part size mmc 0 $part_default part_size && run mmc_write_vol
 emmc_write_recovery=part start mmc 0 $part_recovery part_addr && part size mmc 0 $part_recovery part_size && run mmc_write_vol
+_init_env=setenv _init_env ; setenv _create_env ; saveenv ; saveenv
+_firstboot=setenv _firstboot ; run _switch_to_menu ; run _init_env ; run boot_first
+_switch_to_menu=setenv _switch_to_menu ; setenv bootdelay 3 ; setenv bootmenu_delay 3 ; setenv bootmenu_0 $bootmenu_0d ; setenv bootmenu_0d ; run _bootmenu_update_title
+_bootmenu_update_title=setenv _bootmenu_update_title ; setenv bootmenu_title "$bootmenu_title       [33m$ver[0m"
