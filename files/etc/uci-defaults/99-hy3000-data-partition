@@ -22,9 +22,9 @@ if blkid | grep -q 'LABEL="data"'; then
 	exit 0
 fi
 
-# find the largest free region
-BEST=$(sfdisk --list-free --output Start,Sectors --noheadings "$EMMC" 2>/dev/null \
-	| sort -k2 -n | tail -n 1)
+# find the largest free region (default sfdisk -F output: Start End Sectors Size)
+BEST=$(sfdisk --list-free "$EMMC" 2>/dev/null \
+	| awk 'NR>1 && $3+0 > max { max=$3+0; s=$1 } END { if (max>0) print s, max }')
 [ -n "$BEST" ] || { echo "hy3000-data: cannot read free regions" >&2; exit 0; }
 START=$(echo "$BEST" | awk '{print $1}')
 SECTORS=$(echo "$BEST" | awk '{print $2}')
