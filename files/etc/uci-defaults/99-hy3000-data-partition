@@ -1,73 +1,81 @@
 #!/bin/sh
-# 99-hy3000-data-partition - first boot: turn free eMMC space into a
-# persistent f2fs data partition mounted at /mnt/data.
+# 99-hy3000-data-partition - ensure a persistent f2fs data partition at
+# /mnt/data: create it if absent, and ALWAYS assert the fstab entry +
+# mount it. Covers the case where the partition was created manually but
+# the mount config was never written.
 #
 # Robust against either GPT being active:
 #  - OpenWrt mt798x-gpt layout: one big free region after 'firmware' -> used.
-#  - stock vendor GPT still present: disk is fully allocated; the largest
-#    free gap is only ~4MB (BL2 area) -> we refuse instead of creating a
-#    useless tiny partition. No existing partition is ever touched.
+#  - stock vendor GPT still present: disk fully allocated; largest free gap
+#    is only ~4MB (BL2 area) -> refuse instead of creating a tiny partition.
 #
-# The created partition lives past the firmware area, so sysupgrade (which
-# only rewrites firmware) never touches it. Idempotent via the LABEL check.
+# The partition lives past the firmware area, so sysupgrade never touches it.
+# Idempotent: safe on every first boot of every image.
 
 EMMC=/dev/mmcblk0
-MIN_SECTORS=2097152   # 1 GiB of 512B sectors; smaller free space -> skip
+MIN_SECTORS=2097152   # 1 GiB of 512B sectors; smaller free region -> skip
 
 [ -b "$EMMC" ] || exit 0
 
-# already set up (also true after sysupgrade - partition survives)
-if blkid | grep -q 'LABEL="data"'; then
-	echo "hy3000-data: 'data' partition already present, skipping"
-	exit 0
+DATA_PART=$(blkid | grep 'LABEL="data"' | cut -d: -f1 | head -n1)
+
+if [ -z "$DATA_PART" ]; then
+	# find the largest free region (default sfdisk -F output: Start End Sectors Size)
+	BEST=$(sfdisk --list-free "$EMMC" 2>/dev/null \
+		| awk 'NR>1 && $3+0 > max { max=$3+0; s=$1 } END { if (max>0) print s, max }')
+	[ -n "$BEST" ] || { echo "hy3000-data: cannot read free regions" >&2; exit 0; }
+	START=$(echo "$BEST" | awk '{print $1}')
+	SECTORS=$(echo "$BEST" | awk '{print $2}')
+	if [ -z "$START" ] || [ -z "$SECTORS" ] || [ "$SECTORS" -lt "$MIN_SECTORS" ]; then
+		echo "hy3000-data: largest free region too small (${SECTORS:-0} sectors), skipping" >&2
+		exit 0
+	fi
+
+	# create a partition covering that whole free region (GPT-aware; sfdisk
+	# relocates the backup GPT header to the new end of disk)
+	if ! echo "$START,+" | sfdisk --append "$EMMC"; then
+		echo "hy3000-data: sfdisk failed, skipping" >&2
+		exit 0
+	fi
+
+	# make the new partition node appear without reboot
+	partx -a "$EMMC" 2>/dev/null || true
+	sleep 2
+
+	# highest-numbered mmcblk0pN node (busybox-safe, no `ls -v`)
+	NEWPART=''
+	MAX=-1
+	for p in ${EMMC}p*; do
+		n=${p##*p}
+		case "$n" in ''|*[!0-9]*) continue ;; esac
+		if [ "$n" -gt "$MAX" ]; then MAX=$n; NEWPART=$p; fi
+	done
+	[ -b "$NEWPART" ] || { echo "hy3000-data: new partition node not found" >&2; exit 1; }
+
+	mkfs.f2fs -l data -f "$NEWPART" || { echo "hy3000-data: mkfs.f2fs failed" >&2; exit 1; }
+	DATA_PART="$NEWPART"
+	echo "hy3000-data: created $DATA_PART (f2fs, label 'data')"
 fi
 
-# find the largest free region (default sfdisk -F output: Start End Sectors Size)
-BEST=$(sfdisk --list-free "$EMMC" 2>/dev/null \
-	| awk 'NR>1 && $3+0 > max { max=$3+0; s=$1 } END { if (max>0) print s, max }')
-[ -n "$BEST" ] || { echo "hy3000-data: cannot read free regions" >&2; exit 0; }
-START=$(echo "$BEST" | awk '{print $1}')
-SECTORS=$(echo "$BEST" | awk '{print $2}')
-if [ -z "$START" ] || [ -z "$SECTORS" ] || [ "$SECTORS" -lt "$MIN_SECTORS" ]; then
-	echo "hy3000-data: largest free region too small (${SECTORS:-0} sectors), skipping" >&2
-	exit 0
-fi
-
-# create a partition covering that whole free region (GPT-aware; sfdisk
-# relocates the backup GPT header to the new end of disk)
-if ! echo "$START,+" | sfdisk --append "$EMMC"; then
-	echo "hy3000-data: sfdisk failed, skipping" >&2
-	exit 0
-fi
-
-# make the new partition node appear without reboot
-partx -a "$EMMC" 2>/dev/null || true
-sleep 2
-
-# highest-numbered mmcblk0pN node (busybox-safe, no `ls -v`)
-NEWPART=''
-MAX=-1
-for p in ${EMMC}p*; do
-	n=${p##*p}
-	case "$n" in ''|*[!0-9]*) continue ;; esac
-	if [ "$n" -gt "$MAX" ]; then MAX=$n; NEWPART=$p; fi
-done
-[ -b "$NEWPART" ] || { echo "hy3000-data: new partition node not found" >&2; exit 1; }
-
-mkfs.f2fs -l data -f "$NEWPART" || { echo "hy3000-data: mkfs.f2fs failed" >&2; exit 1; }
-
+# fstab entry is asserted on EVERY run, not only on partition creation -
+# this is what heals a manually-created partition that never got its config
 mkdir -p /mnt/data
-uci -q delete fstab.data
-uci set fstab.data=mount
-uci set fstab.data.label='data'
-uci set fstab.data.target='/mnt/data'
-uci set fstab.data.fstype='f2fs'
-uci set fstab.data.options='rw,noatime'
-uci set fstab.data.enabled='1'
-uci commit fstab
+if ! uci -q get fstab.data >/dev/null; then
+	uci set fstab.data=mount
+	uci set fstab.data.label='data'
+	uci set fstab.data.target='/mnt/data'
+	uci set fstab.data.fstype='f2fs'
+	uci set fstab.data.options='rw,noatime'
+	uci set fstab.data.enabled='1'
+	uci commit fstab
+	echo "hy3000-data: fstab entry added"
+fi
 
-# mount now; if that fails, fstab picks it up on next boot
-mount -t f2fs -o rw,noatime "$NEWPART" /mnt/data 2>/dev/null \
-	|| echo "hy3000-data: will mount via fstab on next boot"
+# mount now if not mounted yet; fstab covers subsequent boots
+if ! grep -q ' /mnt/data ' /proc/mounts; then
+	mount -t f2fs -o rw,noatime "$DATA_PART" /mnt/data 2>/dev/null \
+		&& echo "hy3000-data: mounted $DATA_PART at /mnt/data" \
+		|| echo "hy3000-data: mount failed; fstab will retry on next boot"
+fi
 
-echo "hy3000-data: created $NEWPART (f2fs, label 'data') mounted at /mnt/data"
+exit 0
