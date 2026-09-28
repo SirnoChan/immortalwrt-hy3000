@@ -103,13 +103,18 @@ jobs:
           # ("load BTF for kmod ...: offset ... not the beginning of a
           # string" when daed/sing-box scans it). Build dwarves 1.28 into
           # /usr/local/bin, which shadows /usr/bin on PATH.
+          # NOTE: needs git clone --recurse-submodules (the libbpf submodule
+          # is missing from GitHub's auto-generated tag tarballs).
           sudo -E apt-get -qq install libdw-dev
-          curl -sL --retry 3 https://github.com/acmel/dwarves/archive/refs/tags/v1.28.tar.gz | tar xz
-          cd dwarves-1.28 && mkdir build && cd build \
-            && cmake -D__LIB=lib -DCMAKE_INSTALL_PREFIX=/usr/local .. > /dev/null \
-            && make -j$(nproc) > /dev/null \
-            && sudo make install > /dev/null \
-            && cd ../.. && rm -rf dwarves-1.28
+          git clone --depth 1 --recurse-submodules --shallow-submodules -b v1.28 \
+            https://github.com/acmel/dwarves /tmp/dwarves-src
+          cmake -S /tmp/dwarves-src -B /tmp/dwarves-build \
+            -D__LIB=lib -DCMAKE_INSTALL_PREFIX=/usr/local
+          make -C /tmp/dwarves-build -j"$(nproc)"
+          sudo make -C /tmp/dwarves-build install
+          rm -rf /tmp/dwarves-src /tmp/dwarves-build
+          hash -r
+          test -x /usr/local/bin/pahole || { echo "### pahole install failed"; exit 1; }
           pahole --version
 
       - name: Clone ImmortalWrt source
