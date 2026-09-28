@@ -113,6 +113,8 @@ jobs:
           make -C /tmp/dwarves-build -j"$(nproc)"
           sudo make -C /tmp/dwarves-build install
           rm -rf /tmp/dwarves-src /tmp/dwarves-build
+          # refresh the loader cache: libdwarves*.so land in /usr/local/lib
+          sudo ldconfig
           hash -r
           test -x /usr/local/bin/pahole || { echo "### pahole install failed"; exit 1; }
           pahole --version
