@@ -107,6 +107,11 @@ fi
 # Enable VETH (kernel config file name varies by branch: config-6.6 / config-6.12 ...)
 for kcfg in target/linux/generic/config-*; do
     sed -i 's/# CONFIG_VETH is not set/CONFIG_VETH=m/' "$kcfg"
+    # dae needs only base-kernel BTF. Module split-BTF from our CI build is
+    # corrupt and trips newer libbpf's CO-RE scan ("load BTF for kmod ...:
+    # ... is not the beginning of a string") - disable module BTF entirely.
+    sed -i 's/^CONFIG_DEBUG_INFO_BTF_MODULES=y/# CONFIG_DEBUG_INFO_BTF_MODULES is not set/' "$kcfg"
+    grep -q "DEBUG_INFO_BTF_MODULES" "$kcfg" || echo "# CONFIG_DEBUG_INFO_BTF_MODULES is not set" >> "$kcfg"
 done
 
 echo "=== Verification ==="
