@@ -17,6 +17,8 @@ MIN_SECTORS=2097152   # 1 GiB of 512B sectors; smaller free region -> skip
 
 [ -b "$EMMC" ] || exit 0
 
+command -v blkid >/dev/null || { echo "hy3000-data: blkid missing, cannot ensure data partition" >&2; exit 1; }
+
 DATA_PART=$(blkid | grep 'LABEL="data"' | cut -d: -f1 | head -n1)
 
 if [ -z "$DATA_PART" ]; then
