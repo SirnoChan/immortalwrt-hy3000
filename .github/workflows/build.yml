@@ -35,12 +35,19 @@ jobs:
       - name: Checkout this repo
         uses: actions/checkout@v5
 
-      - name: Compare upstream openwrt-25.12 HEAD with .upstream-sha
+      - name: Compare upstream HEADs with .upstream-sha
         id: check
         run: |
-          UPSTREAM_SHA=$(git ls-remote "$REPO_URL" "refs/heads/$REPO_BRANCH" | cut -f1)
+          # base source + packages feed (daed/sing-box/...) + luci feed
+          # (luci-app-*): a move in any of the three means newer firmware
+          BASE_SHA=$(git ls-remote "$REPO_URL" "refs/heads/$REPO_BRANCH" | cut -f1)
+          PKG_SHA=$(git ls-remote https://github.com/immortalwrt/packages "refs/heads/$REPO_BRANCH" | cut -f1)
+          LUCI_SHA=$(git ls-remote https://github.com/immortalwrt/luci "refs/heads/$REPO_BRANCH" | cut -f1)
+          UPSTREAM_SHA="$BASE_SHA-$PKG_SHA-$LUCI_SHA"
           STORED_SHA=$(cat .upstream-sha 2>/dev/null || true)
-          echo "upstream: $UPSTREAM_SHA"
+          echo "base:     $BASE_SHA"
+          echo "packages: $PKG_SHA"
+          echo "luci:     $LUCI_SHA"
           echo "stored:   ${STORED_SHA:-<none>}"
           echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
           if [ -n "$STORED_SHA" ] && [ "$UPSTREAM_SHA" = "$STORED_SHA" ]; then
