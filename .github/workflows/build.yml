@@ -92,6 +92,18 @@ jobs:
           sudo -E apt-get -qq autoremove --purge
           sudo -E apt-get -qq clean
           sudo timedatectl set-timezone "$TZ"
+          # Ubuntu 22.04's dwarves 1.22 generates broken module split-BTF
+          # ("load BTF for kmod ...: offset ... not the beginning of a
+          # string" when daed/sing-box scans it). Build dwarves 1.28 into
+          # /usr/local/bin, which shadows /usr/bin on PATH.
+          sudo -E apt-get -qq install libdw-dev
+          curl -sL --retry 3 https://github.com/acmel/dwarves/archive/refs/tags/v1.28.tar.gz | tar xz
+          cd dwarves-1.28 && mkdir build && cd build \
+            && cmake -D__LIB=lib -DCMAKE_INSTALL_PREFIX=/usr/local .. > /dev/null \
+            && make -j$(nproc) > /dev/null \
+            && sudo make install > /dev/null \
+            && cd ../.. && rm -rf dwarves-1.28
+          pahole --version
 
       - name: Clone ImmortalWrt source
         run: |
