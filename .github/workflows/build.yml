@@ -139,6 +139,20 @@ jobs:
             echo "### ERROR: philips_hy3000 missing from final .config — device patches did not apply!"
             exit 1
           }
+          # daed stack must survive defconfig: a missing entry means the feeds
+          # dropped/renamed a package or one of its dependencies went unavailable
+          for pkg in daed daed-geosite daed-geoip luci-app-daed; do
+            grep -q "CONFIG_PACKAGE_${pkg}=y" .config || {
+              echo "### ERROR: CONFIG_PACKAGE_${pkg} not in final .config — daed stack incomplete!"
+              grep "CONFIG_PACKAGE_${pkg}" .config || true
+              exit 1
+            }
+          done
+          # daed (eBPF) hard-requires kernel BTF
+          grep -q "CONFIG_KERNEL_DEBUG_INFO_BTF=y" .config || {
+            echo "### ERROR: CONFIG_KERNEL_DEBUG_INFO_BTF=y missing — daed will not run!"
+            exit 1
+          }
           echo "=== Final config (key items) ==="
           grep -E "BTF|BPF|dae|veth|philips|ROOTFS_PARTSIZE" .config || true
 
@@ -178,6 +192,20 @@ jobs:
           echo "status=success" >> $GITHUB_OUTPUT
           echo "=== Output files ==="
           ls -lh bin/targets/mediatek/filogic/
+
+      - name: Verify daed packages in build output
+        if: steps.compile.outputs.status == 'success'
+        run: |
+          cd openwrt
+          echo "=== daed artifacts found in bin/packages ==="
+          find bin/packages -type f \( -name "daed-*" -o -name "luci-app-daed-*" \) | sort
+          for pkg in daed daed-geosite daed-geoip luci-app-daed; do
+            find bin/packages -type f -name "${pkg}-*" | grep -E '\.(apk|ipk)$' | grep -q . || {
+              echo "### ERROR: built artifact for ${pkg} not found in bin/packages — firmware would ship without it!"
+              exit 1
+            }
+          done
+          echo "All daed stack packages built successfully."
 
       - name: Upload build logs on failure
         if: failure()
