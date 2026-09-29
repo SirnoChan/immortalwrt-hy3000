@@ -43,11 +43,15 @@ jobs:
           BASE_SHA=$(git ls-remote "$REPO_URL" "refs/heads/$REPO_BRANCH" | cut -f1)
           PKG_SHA=$(git ls-remote https://github.com/immortalwrt/packages "refs/heads/$REPO_BRANCH" | cut -f1)
           LUCI_SHA=$(git ls-remote https://github.com/immortalwrt/luci "refs/heads/$REPO_BRANCH" | cut -f1)
-          UPSTREAM_SHA="$BASE_SHA-$PKG_SHA-$LUCI_SHA"
+          DAED_TAG=$(curl -s --retry 3 -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/daeuniverse/daed/releases/latest" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")
+          UPSTREAM_SHA="$BASE_SHA-$PKG_SHA-$LUCI_SHA-$DAED_TAG"
           STORED_SHA=$(cat .upstream-sha 2>/dev/null || true)
           echo "base:     $BASE_SHA"
           echo "packages: $PKG_SHA"
           echo "luci:     $LUCI_SHA"
+          echo "daed:     $DAED_TAG"
           echo "stored:   ${STORED_SHA:-<none>}"
           echo "upstream_sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
           if [ -n "$STORED_SHA" ] && [ "$UPSTREAM_SHA" = "$STORED_SHA" ]; then
@@ -136,6 +140,25 @@ jobs:
           cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
+
+      - name: Bump daed to latest upstream release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST=$(curl -s --retry 3 -H "Authorization: Bearer $GITHUB_TOKEN" \
+            "https://api.github.com/repos/daeuniverse/daed/releases/latest" \
+            | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'].lstrip('v'))")
+          CUR=$(grep -oP '^PKG_VERSION:=\K.*' openwrt/feeds/packages/net/daed/Makefile)
+          echo "upstream daed: $LATEST | feed: $CUR"
+          [ -n "$LATEST" ] || { echo "### could not read upstream daed version"; exit 1; }
+          if [ "$LATEST" = "$CUR" ]; then echo "daed already up to date."; exit 0; fi
+          curl -sL --retry 3 "https://github.com/daeuniverse/daed/releases/download/v$LATEST/web.zip" -o /tmp/daed-web.zip
+          WHASH=$(sha256sum /tmp/daed-web.zip | cut -d' ' -f1)
+          sed -i "s/^PKG_VERSION:=.*/PKG_VERSION:=$LATEST/" openwrt/feeds/packages/net/daed/Makefile
+          sed -i "s/^PKG_MIRROR_HASH:=.*/PKG_MIRROR_HASH:=skip/" openwrt/feeds/packages/net/daed/Makefile
+          sed -i "s|^\tHASH:=.*|\tHASH:=$WHASH|" openwrt/feeds/packages/net/daed/Makefile
+          echo "### daed bumped $CUR -> $LATEST (web.zip sha256 $WHASH)"
+          grep -E "PKG_VERSION|PKG_MIRROR_HASH|HASH:=" openwrt/feeds/packages/net/daed/Makefile | head -4
 
       - name: Add HY3000 device support (add-hy3000.sh)
         run: |
@@ -232,6 +255,14 @@ jobs:
             }
           done
           echo "All daed stack packages built successfully."
+
+      - name: Upload daed packages
+        if: steps.compile.outputs.status == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: daed-apk
+          path: openwrt/bin/packages/**/daed*.apk
+          if-no-files-found: ignore
 
       - name: Upload build logs on failure
         if: failure()
